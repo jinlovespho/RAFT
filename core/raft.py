@@ -86,18 +86,19 @@ class RAFT(nn.Module):
     def forward(self, image1, image2, iters=12, flow_init=None, upsample=True, test_mode=False):
         """ Estimate optical flow between pair of frames """
 
-        image1 = 2 * (image1 / 255.0) - 1.0
+        # breakpoint()
+        image1 = 2 * (image1 / 255.0) - 1.0     # normalize [0,255] to [-1,1], shape: (1,3,H,W)
         image2 = 2 * (image2 / 255.0) - 1.0
 
         image1 = image1.contiguous()
         image2 = image2.contiguous()
 
-        hdim = self.hidden_dim
-        cdim = self.context_dim
+        hdim = self.hidden_dim       # 128
+        cdim = self.context_dim      # 128
 
         # run the feature network
         with autocast(enabled=self.args.mixed_precision):
-            fmap1, fmap2 = self.fnet([image1, image2])        
+            fmap1, fmap2 = self.fnet([image1, image2])      # (1, 256, H/8, W/8)
         
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
@@ -108,12 +109,16 @@ class RAFT(nn.Module):
 
         # run the context network
         with autocast(enabled=self.args.mixed_precision):
-            cnet = self.cnet(image1)
+            cnet = self.cnet(image1) # (1, 256, H/8, W/8)
             net, inp = torch.split(cnet, [hdim, cdim], dim=1)
             net = torch.tanh(net)
             inp = torch.relu(inp)
 
+        # initialize two same defualt grids
         coords0, coords1 = self.initialize_flow(image1)
+        # same as the below
+        # yy, xx = torch.meshgrid(torch.arange(image1.shape[2]//8, device=image1.device), torch.arange(image1.shape[3]//8, device=image1.device))
+        # grid = torch.stack([xx,yy],dim=0).unsqueeze(0).float()
 
         if flow_init is not None:
             coords1 = coords1 + flow_init
@@ -121,11 +126,11 @@ class RAFT(nn.Module):
         flow_predictions = []
         for itr in range(iters):
             coords1 = coords1.detach()
-            corr = corr_fn(coords1) # index correlation volume
+            corr = corr_fn(coords1)     # 1 324 55 128  (b c1+c2+c3+c4 h w)
 
             flow = coords1 - coords0
             with autocast(enabled=self.args.mixed_precision):
-                net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)
+                net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)  # recurrent component: net, corr, flow 
 
             # F(t+1) = F(t) + \Delta(t)
             coords1 = coords1 + delta_flow

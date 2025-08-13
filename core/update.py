@@ -88,11 +88,11 @@ class BasicMotionEncoder(nn.Module):
 
     def forward(self, flow, corr):
         cor = F.relu(self.convc1(corr))
-        cor = F.relu(self.convc2(cor))
+        cor = F.relu(self.convc2(cor))      # 1 192 55 128
         flo = F.relu(self.convf1(flow))
-        flo = F.relu(self.convf2(flo))
+        flo = F.relu(self.convf2(flo))      # 1 64 55 128
 
-        cor_flo = torch.cat([cor, flo], dim=1)
+        cor_flo = torch.cat([cor, flo], dim=1)  # 1 192+64 55 128
         out = F.relu(self.conv(cor_flo))
         return torch.cat([out, flow], dim=1)
 
@@ -125,14 +125,16 @@ class BasicUpdateBlock(nn.Module):
             nn.Conv2d(256, 64*9, 1, padding=0))
 
     def forward(self, net, inp, corr, flow, upsample=True):
-        motion_features = self.encoder(flow, corr)
-        inp = torch.cat([inp, motion_features], dim=1)
+        motion_features = self.encoder(flow, corr)      # b 128 55 128 flow와 corr각각 conv태우고, concat하여 conv태우고 마지막에 initial flow랑 concat한 결과
+        inp = torch.cat([inp, motion_features], dim=1)  # b 256 55 128
 
-        net = self.gru(net, inp)
-        delta_flow = self.flow_head(net)
+        # net: b 128 55 128
+        # inp: b 256 55 128 
+        net = self.gru(net, inp)                # b 128 55 128
+        delta_flow = self.flow_head(net)        # b 2 55 128
 
         # scale mask to balence gradients
-        mask = .25 * self.mask(net)
+        mask = .25 * self.mask(net)             # b 576 55 128
         return net, mask, delta_flow
 
 
