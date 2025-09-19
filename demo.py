@@ -80,6 +80,9 @@ def viz(img, flo, img1_id, save_path, concat_flow):
     # plt.imshow(img_flo / 255.0)
     # plt.show()
     
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    
     cv2.imwrite(f'{save_path}/{img1_id}', img_flo[:, :, ::-1])  # BGR format for OpenCV
     # breakpoint()
 
